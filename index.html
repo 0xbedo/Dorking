@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Google Dork Generator — Bug Bounty</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--ink:#16202a;--mut:#5b6773;--line:#dde2e8;--acc:#0b6bcb;--accink:#fff;--warn:#fff4d6;--warnink:#6b4a00}
+@media (prefers-color-scheme:dark){:root{--bg:#10151b;--card:#18202a;--ink:#e6ebf0;--mut:#93a0ad;--line:#2a3541;--acc:#4da3ff;--accink:#08121d;--warn:#2d2608;--warnink:#f0d98a}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 "Segoe UI",Tahoma,"Noto Naskh Arabic",system-ui,sans-serif;padding:24px 16px 48px}
+main{max-width:860px;margin:0 auto}
+h1{font-size:1.7rem;margin:0 0 4px}
+h2{font-size:1.1rem;margin:28px 0 10px}
+p.sub{color:var(--mut);margin:0 0 20px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:16px}
+textarea,input{width:100%;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:10px;font:inherit;direction:ltr;text-align:left}
+textarea{min-height:90px;resize:vertical}
+button{background:var(--acc);color:var(--accink);border:0;border-radius:8px;padding:8px 14px;font:inherit;cursor:pointer}
+button.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+button:focus-visible,input:focus-visible,textarea:focus-visible,a:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.row input{flex:1 1 200px;width:auto}
+.tg{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--line);direction:ltr}
+.tg:last-child{border:0}
+.q{border:1px solid var(--line);border-radius:8px;padding:12px;margin-top:10px}
+.q code{display:block;direction:ltr;text-align:left;word-break:break-all;font:13px/1.5 ui-monospace,Consolas,monospace;background:var(--bg);padding:8px;border-radius:6px;margin:8px 0}
+.q .meta{color:var(--mut);font-size:.9rem}
+.q a{color:var(--acc)}
+table{width:100%;border-collapse:collapse}
+th,td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:start}
+.warn{background:var(--warn);color:var(--warnink);border-radius:8px;padding:12px;margin-top:20px}
+.empty{color:var(--mut)}
+</style>
+</head>
+<body>
+<main>
+<h1>Google Dork Generator</h1>
+<p class="sub">Google + GitHub + Shodan + Censys + FOFA — كل target يولّد queries جاهزة للبحث في كل المحركات</p>
+
+<section class="card">
+  <label for="bulk">الصق قائمة الـ Scope (سطر لكل domain)</label>
+  <textarea id="bulk" placeholder="example.com&#10;*.example.org&#10;https://app.example.net/login"></textarea>
+  <div class="row"><button id="importBtn">استيراد القائمة</button></div>
+  <div class="row">
+    <input id="one" placeholder="أو أضف target واحد: example.com" aria-label="target">
+    <button id="addBtn">إضافة target</button>
+  </div>
+</section>
+
+<section class="card">
+  <div class="row" style="justify-content:space-between;align-items:center;margin:0 0 8px">
+    <strong id="count">قائمة الـ Targets: 0</strong>
+    <button class="ghost" id="clearBtn">مسح الكل</button>
+  </div>
+  <div id="targets"><span class="empty">لسه مفيش targets.</span></div>
+</section>
+
+<h2>الـ Queries</h2>
+<div id="out"><span class="empty">أضف target علشان تظهر الـ queries.</span></div>
+
+<h2>ملخص</h2>
+<div class="card">
+<table id="sum"><thead><tr><th>Query</th><th>الفئة</th><th>Dorks</th></tr></thead><tbody></tbody></table>
+</div>
+
+<div class="warn"><strong>Responsible Disclosure:</strong> الـ dorks دي للـ passive reconnaissance فقط ضمن برامج Bug Bounty المصرح بها. اتأكد إن الـ target in-scope قبل أي اختبار، وابعت الـ findings عبر المنصة الرسمية للبرنامج.</div>
+</main>
+
+<script>
+// {t} is replaced by the target. Edit these arrays to customize the dorks.
+var CATS=[
+ {name:"API, Admin & Panels",d:[
+  'inurl:api','inurl:"/api/v1"','inurl:"/api/v2"','inurl:swagger','intitle:"Swagger UI"',
+  'inurl:graphql','inurl:api-docs','inurl:admin','inurl:login','inurl:dashboard',
+  'inurl:portal','inurl:"/wp-admin"','inurl:phpmyadmin','inurl:"/console"','inurl:manager']},
+ {name:"Files, Configs & Secrets",d:[
+  'ext:env','ext:log','ext:sql','ext:bak','ext:old','ext:conf','ext:cfg','ext:ini',
+  'ext:yml','ext:json','ext:xml','ext:zip','ext:txt "password"','filetype:pdf "confidential"','inurl:".git"']},
+ {name:"Directory Listing & Fingerprinting",d:[
+  'intitle:"index of"','intitle:"index of" "parent directory"','intitle:"phpinfo()"','inurl:phpinfo.php',
+  'inurl:server-status','inurl:".well-known"','inurl:robots.txt','inurl:sitemap.xml',
+  'inurl:actuator','inurl:debug','inurl:test','inurl:readme','"Apache Tomcat"','"Server at" "Port"','"powered by"']},
+ {name:"Dev/Staging & Dashboards",d:[
+  'inurl:dev','inurl:staging','inurl:uat','inurl:beta','inurl:internal',
+  'inurl:jenkins','inurl:grafana','inurl:kibana','intitle:"Dashboard"','inurl:test']}
+];
+// GitHub code-search dorks. Each one runs alone (GitHub limits operators per query).
+var GH=[
+ 'password','passwd','secret','api_key','apikey','access_token','client_secret','authorization: Bearer',
+ 'token','aws_access_key_id','AKIA','sk_live','hooks.slack.com','jdbc:','mongodb://','postgres://',
+ 'smtp password','internal','staging','jenkins',
+ 'filename:.env','filename:config','filename:credentials','filename:id_rsa','filename:.htpasswd',
+ 'filename:wp-config.php','filename:docker-compose.yml','filename:.npmrc _auth',
+ 'extension:sql','extension:pem','extension:log','"BEGIN RSA PRIVATE KEY"','"BEGIN OPENSSH PRIVATE KEY"'
+];
+// Internet-scan engines. {t} = target. Each engine builds its own search URL.
+var PORTS=[21,22,23,3306,3389,5432,5900,6379,9200,27017];
+var TITLES=['Dashboard','Index of','Login','Jenkins','Grafana','Kibana','Swagger UI'];
+var ENG=[
+ {name:'Shodan',note:'محتاج حساب Shodan',
+  d:['hostname:"{t}"','ssl:"{t}"','ssl.cert.subject.cn:"{t}"','hostname:"{t}" http.status:403','hostname:"{t}" http.status:401']
+   .concat(PORTS.map(function(p){return 'hostname:"{t}" port:'+p}))
+   .concat(TITLES.map(function(x){return 'ssl:"{t}" http.title:"'+x+'"'})),
+  url:function(q){return 'https://www.shodan.io/search?query='+encodeURIComponent(q)}},
+ {name:'Censys',note:'الصيغة ممكن تختلف حسب نسخة Censys',
+  d:['dns.names: "{t}"','services.tls.certificates.leaf_data.names: "{t}"','services.tls.certificates.leaf_data.subject.common_name: "{t}"']
+   .concat(PORTS.map(function(p){return 'dns.names: "{t}" and services.port: '+p}))
+   .concat(TITLES.map(function(x){return 'dns.names: "{t}" and services.http.response.html_title: "'+x+'"'})),
+  url:function(q){return 'https://search.censys.io/search?resource=hosts&q='+encodeURIComponent(q)}},
+ {name:'FOFA',note:'محتاج حساب FOFA',
+  d:['domain="{t}"','host="{t}"','cert="{t}"','header="{t}"','domain="{t}" && status_code="403"','domain="{t}" && status_code="401"']
+   .concat(PORTS.map(function(p){return 'domain="{t}" && port="'+p+'"'}))
+   .concat(TITLES.map(function(x){return 'domain="{t}" && title="'+x+'"'})),
+  url:function(q){return 'https://en.fofa.info/result?qbase64='+encodeURIComponent(btoa(q))}}
+];
+var targets=[];
+var $=function(id){return document.getElementById(id)};
+
+function clean(s){
+  s=s.trim().toLowerCase().replace(/^[a-z]+:\/\//,'').replace(/^\*\./,'').split(/[\/?#\s]/)[0];
+  return /^[a-z0-9.-]+\.[a-z]{2,}$/.test(s)?s:'';
+}
+function add(list){
+  list.forEach(function(x){var d=clean(x);if(d&&targets.indexOf(d)<0)targets.push(d)});
+  render();
+}
+function copy(text,btn){
+  var done=function(){var o=btn.textContent;btn.textContent='تم النسخ';setTimeout(function(){btn.textContent=o},1200)};
+  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(text).then(done,function(){})}
+}
+function render(){
+  $('count').textContent='قائمة الـ Targets: '+targets.length;
+  var tg=$('targets');tg.textContent='';
+  if(!targets.length){tg.innerHTML='<span class="empty">لسه مفيش targets.</span>'}
+  targets.forEach(function(t,i){
+    var r=document.createElement('div');r.className='tg';
+    var s=document.createElement('span');s.textContent=t;
+    var b=document.createElement('button');b.className='ghost';b.textContent='حذف';
+    b.onclick=function(){targets.splice(i,1);render()};
+    r.appendChild(s);r.appendChild(b);tg.appendChild(r);
+  });
+  var out=$('out');out.textContent='';
+  if(!targets.length){out.innerHTML='<span class="empty">أضف target علشان تظهر الـ queries.</span>'}
+  targets.forEach(function(t){
+    var card=document.createElement('div');card.className='card';
+    var h=document.createElement('strong');h.textContent=t;h.style.direction='ltr';h.style.display='block';
+    card.appendChild(h);
+    CATS.forEach(function(c,i){
+      var q='site:'+t+' ('+c.d.join(' OR ')+')';
+      var box=document.createElement('div');box.className='q';
+      var m=document.createElement('div');m.className='meta';m.textContent='Query '+(i+1)+' — '+c.name+' ('+c.d.length+')';
+      var code=document.createElement('code');code.textContent=q;
+      var cb=document.createElement('button');cb.className='ghost';cb.textContent='نسخ';
+      cb.onclick=function(){copy(q,cb)};
+      var a=document.createElement('a');a.href='https://www.google.com/search?q='+encodeURIComponent(q);
+      a.target='_blank';a.rel='noopener noreferrer';a.textContent=' فتح في Google';a.style.marginInlineStart='12px';
+      box.appendChild(m);box.appendChild(code);box.appendChild(cb);box.appendChild(a);card.appendChild(box);
+    });
+    var gt=document.createElement('strong');gt.textContent='GitHub dorks ('+GH.length+')';
+    gt.style.display='block';gt.style.marginTop='16px';card.appendChild(gt);
+    GH.forEach(function(d){
+      var q='"'+t+'" '+d;
+      var box=document.createElement('div');box.className='q';
+      var code=document.createElement('code');code.textContent=q;
+      var cb=document.createElement('button');cb.className='ghost';cb.textContent='نسخ';
+      cb.onclick=function(){copy(q,cb)};
+      var a=document.createElement('a');a.href='https://github.com/search?type=code&q='+encodeURIComponent(q);
+      a.target='_blank';a.rel='noopener noreferrer';a.textContent=' فتح في GitHub';a.style.marginInlineStart='12px';
+      box.appendChild(code);box.appendChild(cb);box.appendChild(a);card.appendChild(box);
+    });
+    ENG.forEach(function(e){
+      var det=document.createElement('details');det.style.marginTop='14px';
+      var sm=document.createElement('summary');sm.style.cursor='pointer';sm.style.fontWeight='600';
+      sm.textContent=e.name+' dorks ('+e.d.length+') — '+e.note;det.appendChild(sm);
+      e.d.forEach(function(d){
+        var q=d.replace(/\{t\}/g,t);
+        var box=document.createElement('div');box.className='q';
+        var code=document.createElement('code');code.textContent=q;
+        var cb=document.createElement('button');cb.className='ghost';cb.textContent='نسخ';
+        cb.onclick=function(){copy(q,cb)};
+        var a=document.createElement('a');a.href=e.url(q);
+        a.target='_blank';a.rel='noopener noreferrer';a.textContent=' فتح في '+e.name;a.style.marginInlineStart='12px';
+        box.appendChild(code);box.appendChild(cb);box.appendChild(a);det.appendChild(box);
+      });
+      card.appendChild(det);
+    });
+    out.appendChild(card);
+  });
+}
+(function(){
+  var tb=$('sum').tBodies[0],total=0;
+  CATS.forEach(function(c,i){
+    total+=c.d.length;var r=tb.insertRow();
+    r.insertCell().textContent='Query '+(i+1);r.insertCell().textContent=c.name;r.insertCell().textContent=c.d.length;
+  });
+  var g=tb.insertRow();g.insertCell().textContent='GitHub';g.insertCell().textContent='Code search (كل dork لوحده)';g.insertCell().textContent=GH.length;
+  total+=GH.length;
+  ENG.forEach(function(e){var x=tb.insertRow();x.insertCell().textContent=e.name;x.insertCell().textContent='Internet scan (كل dork لوحده)';x.insertCell().textContent=e.d.length;total+=e.d.length});
+  var r=tb.insertRow();r.insertCell().textContent='المجموع';r.insertCell().textContent='';r.insertCell().textContent=total;
+})();
+$('importBtn').onclick=function(){add($('bulk').value.split(/\n/));$('bulk').value=''};
+$('addBtn').onclick=function(){add([$('one').value]);$('one').value=''};
+$('one').addEventListener('keydown',function(e){if(e.key==='Enter'){$('addBtn').click()}});
+$('clearBtn').onclick=function(){targets=[];render()};
+render();
+</script>
+</body>
+</html>
